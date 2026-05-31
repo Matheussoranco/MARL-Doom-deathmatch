@@ -123,7 +123,7 @@ class DeathmatchEnv:
 
         if rank == 0:
             self.game.add_game_args(
-                f'-host {n_players} -port {port} -deathmatch '
+                f'-host {n_players} -port {port} -netmode 0 -deathmatch '
                 f'+timelimit {episode_minutes} '
                 '+sv_forcerespawn 1 +sv_noautoaim 1 +sv_respawnprotect 1 '
                 '+sv_spawnfarthest 1 +sv_nocrouch 1 +viz_respawn_delay 2 '
@@ -743,9 +743,31 @@ def train(cfg):
         role = 'CONTRIB' if contribute else f'LEAGUE(p={league_prob:.2f})'
         print(f'  spawned agent {rank} ({role})')
         if rank == 0:
-            time.sleep(2.5)
+            # Host opens the listen socket inside game.init(); give the cold
+            # process time to import torch/cv2/vizdoom before joiners connect.
+            time.sleep(6.0)
         else:
             time.sleep(0.4)
+
+    # Barrier: every worker's ViZDoom env must come up. The host's ready_event
+    # only fires after the full multiplayer handshake completes, so if any
+    # joiner failed to connect we'd otherwise deadlock here forever. Detect it
+    # and abort loudly instead.
+    handshake_deadline = time.time() + 120
+    for rank, rev in enumerate(ready_events):
+        if not rev.wait(timeout=max(0.0, handshake_deadline - time.time())):
+            print(f'[train] agent {rank} never initialized (multiplayer '
+                  f'handshake failed); aborting.', flush=True)
+            stop_event.set()
+            for p in procs:
+                if p.is_alive():
+                    p.terminate()
+            for p in procs:
+                p.join(timeout=5)
+            if video_proc.is_alive():
+                video_proc.terminate()
+            return model_path
+    print('All agents connected; deathmatch underway.')
 
     print(f'\nGathering {cfg.rollouts_per_update} rollouts per PPO update.')
     print(f'Snapshotting every {cfg.snapshot_every} updates, '
