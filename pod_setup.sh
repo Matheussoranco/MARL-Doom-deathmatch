@@ -71,8 +71,12 @@ pip install --no-cache-dir torch torchvision \
     --index-url "https://download.pytorch.org/whl/${CUDA_TAG}"
 
 log "Installing ViZDoom + RL deps"
+# Pin ViZDoom 1.2.4: the 1.3.0 engine rework (audio-backend restarts, texture
+# determinism) segfaults natively inside init() on headless pods even with a
+# working xvfb + Mesa GL context. 1.2.4 is the last stable 1.2 build and is
+# API-compatible with this training code.
 pip install --no-cache-dir \
-    "vizdoom>=1.2.3" \
+    "vizdoom==1.2.4" \
     "opencv-python-headless>=4.10" \
     "numpy<2.1" \
     "imageio>=2.34" \
