@@ -40,7 +40,8 @@ $SUDO apt-get install -y --no-install-recommends \
     libwildmidi-dev libgtk2.0-dev nasm libfluidsynth-dev \
     libxmp-dev tar libbz2-dev zlib1g-dev libpng-dev libtiff-dev \
     python3 python3-dev python3-pip python3-venv \
-    ffmpeg xvfb pkg-config
+    ffmpeg xvfb pkg-config \
+    libgl1-mesa-dri libgl1-mesa-glx libglu1-mesa x11-xserver-utils
 
 # ----------------------------------------------------------------------------
 log "Creating Python venv at ~/doom_venv"
@@ -88,8 +89,11 @@ if torch.cuda.is_available():
     print("device count =", torch.cuda.device_count())
 PY
 
-log "Smoke test: ViZDoom (headless cig.cfg)"
-python - <<'PY'
+log "Smoke test: ViZDoom (headless cig.cfg, under virtual X display)"
+# ViZDoom's engine opens a GLX/OpenGL context in init() even with the window
+# hidden. On a headless pod there is no X server, so it segfaults. xvfb-run
+# provides a virtual display and the Mesa swrast driver renders on CPU.
+xvfb-run -a -s '-screen 0 1280x1024x24' python - <<'PY'
 import vizdoom as vzd
 from pathlib import Path
 print("vizdoom =", vzd.__version__)
@@ -118,10 +122,12 @@ cat <<'EOF'
 ----------------------------------------------------------------------------
   Setup OK.
 
-  Next steps:
+  Next steps (note: training MUST run under xvfb-run on a headless pod,
+  otherwise the ViZDoom engine segfaults trying to open a GL context):
     source ~/doom_venv/bin/activate
     tmux new -s doom
-    python doom_deathmatch_ppo.py --save_dir ./runs/run01
+    xvfb-run -a -s '-screen 0 1280x1024x24' \
+        python doom_deathmatch_ppo.py --save_dir ./runs/run01
 
   In tmux: Ctrl+B then D to detach; `tmux attach -t doom` to reattach.
 
