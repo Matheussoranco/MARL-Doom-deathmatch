@@ -93,10 +93,15 @@ if torch.cuda.is_available():
     print("device count =", torch.cuda.device_count())
 PY
 
-log "Smoke test: ViZDoom (headless cig.cfg, under virtual X display)"
-# ViZDoom's engine opens a GLX/OpenGL context in init() even with the window
-# hidden. On a headless pod there is no X server, so it segfaults. xvfb-run
-# provides a virtual display and the Mesa swrast driver renders on CPU.
+log "Smoke test: ViZDoom (headless cig DEATHMATCH, under virtual X display)"
+# Clear stale ViZDoom IPC artifacts from any prior crashed run; orphaned
+# message-queue/shared-memory files block the controller<->engine handshake
+# and segfault in waitForDoomStart().
+rm -f /dev/shm/*iZDoom* /dev/shm/*Doom* 2>/dev/null || true
+# IMPORTANT: cig is a deathmatch/multiplayer map with NO single-player start.
+# A plain single-player init segfaults at first render (null player camera), so
+# it must be launched in -host -deathmatch mode -- exactly how training uses it.
+# We also use RGB24 here to match the training observation format.
 xvfb-run -a -s '-screen 0 1280x1024x24' python - <<'PY'
 import vizdoom as vzd
 from pathlib import Path
@@ -105,14 +110,19 @@ cfg = Path(vzd.scenarios_path) / "cig.cfg"
 assert cfg.is_file(), f"cig.cfg not found at {cfg}"
 g = vzd.DoomGame()
 g.load_config(str(cfg))
-g.set_window_visible(False)
+g.set_screen_format(vzd.ScreenFormat.RGB24)
 g.set_screen_resolution(vzd.ScreenResolution.RES_640X480)
+g.set_window_visible(False)
+g.add_game_args('-host 1 -port 5044 -netmode 0 -deathmatch +timelimit 1 '
+                '+sv_forcerespawn 1 +sv_spawnfarthest 1 +viz_nocheat 1')
+g.add_game_args('+name SETUP +colorset 0')
 g.init()
 g.new_episode()
 for _ in range(8):
     g.make_action([0]*g.get_available_buttons_size(), 1)
+st = g.get_state()
 print("ViZDoom step OK, screen buf shape =",
-      g.get_state().screen_buffer.shape if g.get_state() else None)
+      None if st is None else st.screen_buffer.shape)
 g.close()
 print("OK")
 PY
