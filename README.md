@@ -335,8 +335,4 @@ Os agentes exibiram comportamento alinhado à teoria **"prospect-refuge"** de **
 
 ---
 
-### Autores
-
-Paloma Sette · Antônio Moreira Pinto · João Ventura · José Ribamar Durand · Matheus Soranço
-
-*Projeto desenvolvido para a disciplina INF2072 · IA3 · Informática · 2026.1 — Mestrado em Sistemas Multiagentes.*
+*Projeto desenvolvido para a disciplina INF2072.*
